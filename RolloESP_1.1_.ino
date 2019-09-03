@@ -10,8 +10,7 @@
    - experimental webserver
 
    TODO:
-   - add timed controll for flickering candle-LED
-   - add button on webserver to toggle candle-LED
+   - gradual change of timing
 
 */
 
@@ -85,7 +84,8 @@ const byte front_lock_dates[2][2] = {{16, 5}, {16, 8}};
 const byte front_ignore_dates = 0;
 const byte times[2][8][2][2] =  {{{{10, 30}, {13, 0}}, {{9, 30}, {13, 30}}, {{8, 0}, {14, 0}}, {{6,  30}, {16, 30}}, {{8,   0}, {14, 0}}, {{8, 30}, {13, 30}}, {{9, 30}, {13, 0}}, {{10, 30}, {13, 0}}},  //times ignore daylight saving time
                                  {{{0,   0}, {0,  0}}, {{0,  0}, {0,   0}}, {{0, 0}, {0,  0}}, {{11, 30}, {20, 30}}, {{11, 30}, {19, 0}}, {{12, 0}, {18,  0}}, {{0,  0}, {0,  0}}, {{0,   0}, {0,  0}}}}; //back shutters
-const byte dates[9][2] =          {{1, 04},             {15, 4},             {1, 5},            {16, 5},              {1, 8},              {1, 9},              {16, 9},            {1, 10},           {20, 10}};
+const byte dates[9][2] =          {{1, 4},              {15, 4},             {1, 5},            {16, 5},              {1, 8},              {1, 9},              {16, 9},            {1, 10},           {20, 10}};
+byte current_times[2][2];
 
 MDNSResponder mdns;
 DS_Weather dsw;
@@ -341,6 +341,32 @@ int getDarksky(int index){
   return weather_data[index];
 }
 
+int timeToMins(byte _hour, byte _minute){
+   int minutes_since_0 = _hour * 60;
+   minutes_since_0 += _minutes;
+   return minutes_since_0;
+}
+
+int dailyDiff(byte nr, bool direction){
+   int date;
+   int time_diff;
+   int date_diff;
+   int og_date_diff;
+   int diff;
+   for (int i = 0; i < 9; i++) {
+      if (dates[i][1] < month() || (dates[i][1] == month() && dates[i][0] <= day())) {
+      date = i;
+      }
+   }
+   og_date_diff = dates[date + 1][0] - dates[date][0]) + (dates[date + 1][1] - dates[date][1])*30;
+   date_diff = dates[date + 1][0] - day();
+   date_diff += (dates[date + 1][1] - month()) * 30;
+   time_diff = (timeToMins(times[nr][date][direction][0], times[nr][date][direction][1]));
+   time_diff -= (og_date_diff - date_diff) * (time_diff / og_date_diff);
+   diff = time_diff / date_diff;
+   return diff;
+}
+
 char* expressState(int index){
   if(r_state[index]){
     return "Hoch";
@@ -433,6 +459,10 @@ void sendNTPpacket(IPAddress &address)
 
 void loop() {
   while (hour() >= 6 && hour() <= 24) {
+    current_times[0][0] = dailyDiff(0, false);
+    current_times[0][1] = dailyDiff(0, true);
+    current_times[1][0] = dailyDiff(0, false);
+    current_times[1][1] = dailyDiff(0, true);
     last = millis();
     while (millis() - last < 50){
       ArduinoOTA.handle();
