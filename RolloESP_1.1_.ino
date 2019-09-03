@@ -10,7 +10,7 @@
    - experimental webserver
 
    TODO:
-   - gradual change of timing
+   - test it out :)
 
 */
 
@@ -159,8 +159,11 @@ String prepareHtmlPage(){
                 "<h1>ESP Rollo - Server</h1>" +
                 "<p><sup>" + timeAsString() + "</sup></p>" +
                 "<p>Roll&aumlden zur Stra&szlige: " + expressState(0) + "</p>" +
+                "<p>Heute heruntergefahren von " + minsToTime(currentTimes[0][0]) + " bis " + minsToTime(currentTimes[0][1]) + "<p>" +
                 "<p>Roll&aumlden zum Garten: " + expressState(2) + "</p>" +
+                "<p>Heute heruntergefahren von " + minsToTime(currentTimes[1][0]) + " bis " + minsToTime(currentTimes[1][1]) + "<p>" +
                 "<p>Stoffroll&aumlden: " + expressState(1) + "</p>" +
+                "<p>Heute planm&auml&szligig heruntergefahren von " + minsToTime(currentTimes[0][0]) + " bis " + minsToTime(currentTimes[0][1]) + "<p>" +
                 "<p>&nbsp;</p>" +
                 "<p>Temperatur Dachboden: " + temperatureString(getTemperature()) + "</p>" +
                 "<p>&nbsp;</p>" +
@@ -328,7 +331,7 @@ bool scheduleState(int shutters) {
       date = i;
     }
   }
-  if (date != -1 && date != 8 && times[nr][date][0][0] != 0 && !(shutters == 0 && date == front_ignore_dates) && (times[nr][date][0][0] < hour() || (times[nr][date][0][0] == hour() && times[nr][date][0][1] <= minute())) && (times[nr][date][1][0] > hour() || (times[nr][date][1][0] == hour() && times[nr][date][1][1] >= minute()))) {
+  if (date != -1 && date != 8 && times[nr][date][0][0] != 0 && !(shutters == 0 && date == front_ignore_dates) && timeToMins(hour(), minute()) > current_times[nr][0] && timeToMins(hour(), minute()) < current_times[nr][1]) {
     result = false;
   }
   if (shutters == 0 && (front_lock_dates[0][1] < month() || (front_lock_dates[0][1] == month() && front_lock_dates[0][0] <= day())) && (front_lock_dates[1][1] > month() || (front_lock_dates[1][1] == month() && front_lock_dates[1][0] >= day()))) {
@@ -339,6 +342,13 @@ bool scheduleState(int shutters) {
 
 int getDarksky(int index){
   return weather_data[index];
+}
+
+String minsToTime(int _time){
+   int _minutes = _time % 60;
+   int _hours = (_times - _minutes) / 60;
+   String result = "%02d:%02d", _hours, _minutes;
+   return result;
 }
 
 int timeToMins(byte _hour, byte _minute){
@@ -461,8 +471,8 @@ void loop() {
   while (hour() >= 6 && hour() <= 24) {
     current_times[0][0] = dailyDiff(0, false);
     current_times[0][1] = dailyDiff(0, true);
-    current_times[1][0] = dailyDiff(0, false);
-    current_times[1][1] = dailyDiff(0, true);
+    current_times[1][0] = dailyDiff(1, false);
+    current_times[1][1] = dailyDiff(1, true);
     last = millis();
     while (millis() - last < 50){
       ArduinoOTA.handle();
