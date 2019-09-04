@@ -378,19 +378,19 @@ int timeToMins(byte _hour, byte _minute){
    return minutes_since_0;
 }
 
-int dailyDiff(byte nr, bool direction){
+int dailyTime(byte nr, bool direction){
    int time_diff;
    int date_diff;
    int og_date_diff;
-   int diff;
+   int new_time;
    
-   og_date_diff = dates[date + 1][0] - dates[date][0]) + (dates[date + 1][1] - dates[date][1])*30;
+   og_date_diff = (dates[date + 1][0] - dates[date][0]) + (dates[date + 1][1] - dates[date][1])*30; //20
    date_diff = dates[date + 1][0] - day();
-   date_diff += (dates[date + 1][1] - month()) * 30;
-   time_diff = (timeToMins(times[nr][date][direction][0], times[nr][date][direction][1]));
-   time_diff -= (og_date_diff - date_diff) * (time_diff / og_date_diff);
-   diff = time_diff / date_diff;
-   return diff;
+   date_diff += (dates[date + 1][1] - month()) * 30; //15  80
+   time_diff = timeToMins(times[nr][date + 1][direction][0], times[nr][date + 1][direction][1]) - timeToMins(times[nr][date][direction][0], times[nr][date][direction][1]);
+   time_diff -= (date_diff) * (time_diff / og_date_diff);
+   new_time = timeToMins(times[nr][date][direction][0], times[nr][date][direction][1]) + time_diff;
+   return new_time;
 }
 
 char* expressState(int index){
@@ -486,10 +486,10 @@ void sendNTPpacket(IPAddress &address)
 void loop() {
   while (hour() >= 6 && hour() <= 24) {
     updateDate();
-    current_times[0][0] = dailyDiff(0, false);
-    current_times[0][1] = dailyDiff(0, true);
-    current_times[1][0] = dailyDiff(1, false);
-    current_times[1][1] = dailyDiff(1, true);
+    current_times[0][0] = dailyTime(0, false);
+    current_times[0][1] = dailyTime(0, true);
+    current_times[1][0] = dailyTime(1, false);
+    current_times[1][1] = dailyTime(1, true);
     last = millis();
     while (millis() - last < 50){
       ArduinoOTA.handle();
