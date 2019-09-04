@@ -67,6 +67,7 @@ bool error_notification = false;
 bool r_state[3] = {true, true, true}; //0 = front shuttera, 1 = fabric, 2 = back shutters
 bool last_state[3] = {false, false, false};
 int weather_data[3];
+byte date;
 
 
 
@@ -159,11 +160,11 @@ String prepareHtmlPage(){
                 "<h1>ESP Rollo - Server</h1>" +
                 "<p><sup>" + timeAsString() + "</sup></p>" +
                 "<p>Roll&aumlden zur Stra&szlige: " + expressState(0) + "</p>" +
-                "<p>Heute heruntergefahren von " + minsToTime(currentTimes[0][0]) + " bis " + minsToTime(currentTimes[0][1]) + "<p>" +
+                "<p>" + showCurrentTimes(0) + "<p>" +
                 "<p>Roll&aumlden zum Garten: " + expressState(2) + "</p>" +
-                "<p>Heute heruntergefahren von " + minsToTime(currentTimes[1][0]) + " bis " + minsToTime(currentTimes[1][1]) + "<p>" +
+                "<p>" + showCurrentTimes(2) + "<p>" +
                 "<p>Stoffroll&aumlden: " + expressState(1) + "</p>" +
-                "<p>Heute planm&auml&szligig heruntergefahren von " + minsToTime(currentTimes[0][0]) + " bis " + minsToTime(currentTimes[0][1]) + "<p>" +
+                "<p>" + showCurrentTimes(1) + "<p>" +
                 "<p>&nbsp;</p>" +
                 "<p>Temperatur Dachboden: " + temperatureString(getTemperature()) + "</p>" +
                 "<p>&nbsp;</p>" +
@@ -318,18 +319,12 @@ void controllShutter() {    //also updates global weather array (weather_data)
 
 bool scheduleState(int shutters) {
   int nr = shutters;
-  int date = -1;
   bool result = true;
   if (shutters == 1) {
     nr = 0;
   }
-  if (shutters == 2) {
+  else if (shutters == 2) {
     nr = 1;
-  }
-  for (int i = 0; i < 9; i++) {
-    if (dates[i][1] < month() || (dates[i][1] == month() && dates[i][0] <= day())) {
-      date = i;
-    }
   }
   if (date != -1 && date != 8 && times[nr][date][0][0] != 0 && !(shutters == 0 && date == front_ignore_dates) && timeToMins(hour(), minute()) > current_times[nr][0] && timeToMins(hour(), minute()) < current_times[nr][1]) {
     result = false;
@@ -344,6 +339,32 @@ int getDarksky(int index){
   return weather_data[index];
 }
 
+void updateDate(){
+   date = -1;
+   for (int i = 0; i < 9; i++) {
+    if (dates[i][1] < month() || (dates[i][1] == month() && dates[i][0] <= day())) {
+      date = i;
+    }
+   }
+}
+
+String showCurrentTimes(int nr){
+   int table_nr = 0
+      String sentence;
+   if (nr != 0) {
+     table_nr = nr - 1;
+   }
+   if (times[table_nr][date][0][0] == 0 || date == -1 || date == 8){
+      sentence = "Diese Rollos werden im aktuellen Zeitraum nicht heruntergefahren.";
+   else if (nr == 0 && (front_lock_dates[0][1] < month() || (front_lock_dates[0][1] == month() && front_lock_dates[0][0] <= day())) && (front_lock_dates[1][1] > month() || (front_lock_dates[1][1] == month() && front_lock_dates[1][0] >= day()))){
+      sentence = "Diese Rollos werden im aktuellen Zeitraum nicht hochgefahren.";
+   else if (nr == 1){
+      sentence = "Diese Rollos sind heute planmäßig von " + minsToTime(current_times[table_nr][0]) + " bis " + minsToTime(current_times[table_nr][1]) + " unten.";
+   else{
+      sentence = "Diese Rollos sind heute von " + minsToTime(current_times[table_nr][0]) + " bis " + minsToTime(current_times[table_nr][1]) + " unten.";
+   }
+}
+      
 String minsToTime(int _time){
    int _minutes = _time % 60;
    int _hours = (_times - _minutes) / 60;
@@ -358,16 +379,11 @@ int timeToMins(byte _hour, byte _minute){
 }
 
 int dailyDiff(byte nr, bool direction){
-   int date;
    int time_diff;
    int date_diff;
    int og_date_diff;
    int diff;
-   for (int i = 0; i < 9; i++) {
-      if (dates[i][1] < month() || (dates[i][1] == month() && dates[i][0] <= day())) {
-      date = i;
-      }
-   }
+   
    og_date_diff = dates[date + 1][0] - dates[date][0]) + (dates[date + 1][1] - dates[date][1])*30;
    date_diff = dates[date + 1][0] - day();
    date_diff += (dates[date + 1][1] - month()) * 30;
@@ -469,6 +485,7 @@ void sendNTPpacket(IPAddress &address)
 
 void loop() {
   while (hour() >= 6 && hour() <= 24) {
+    updateDate();
     current_times[0][0] = dailyDiff(0, false);
     current_times[0][1] = dailyDiff(0, true);
     current_times[1][0] = dailyDiff(1, false);
