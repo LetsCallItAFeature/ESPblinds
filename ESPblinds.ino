@@ -35,18 +35,18 @@
 #include <TimeLib.h>
 
 #ifndef STASSID
-#define STASSID "SYS_ERROR_2"
-#define STAPSK  "08958762264002252816"
+#define STASSID "xxxxxxxx"    //add WiFi network name here
+#define STAPSK  "xxxxxxxxxxxxx"  //add WiFi network password here
 #endif
-#define OTA_PASSWORD "8822464631"
+#define OTA_PASSWORD "xxxxxxxxxxx"  //add OTA password here
 #define FRONT_ALL 7
 #define BACK_MOST 8
 #define BACK_LAST 9
 #define ONE_WIRE_BUS 12
 
-String api_key = "50061c7a3a3df2e2e4d4b78d170f06db";
-String latitude = "52.1843";
-String longitude = "9.4705";
+String api_key = "xxxxxxxxxxxxxxxxxxx";   //add DarkSky API key here
+String latitude = "xx.xxxx";     //add latitude of the blinds here
+String longitude = "xx.xxxx";    //add longitude of the blinds here
 String units = "si";
 String language = "";
 const char* ssid = STASSID;
@@ -69,7 +69,7 @@ int weather_data[3];
 byte date;
 
 
-
+//Shortend 
 bool r1_1[24] =    {0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1};
 bool r1_2[24] =    {0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0};
 bool r1_3[24] =    {0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0};
