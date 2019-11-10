@@ -2,15 +2,14 @@
    RolloESP  V 1.0
    
    - shutters controlled according to a timetable
-    - includes locking front shutters down in summer (summer-lock)
+   - includes locking front shutters down in summer (summer-lock)
    - fabric shutters controlled according to a timetable and weather
    - all shutters up during the night unless summer-locked
    - no updating/controlling in the night (semi low-power)
    - OTA uploading of sketches supported
    - experimental webserver
 
-   TODO:
-   - test it out :)
+   by Kai Arnetzl
 
 */
 
