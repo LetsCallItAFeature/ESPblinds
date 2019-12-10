@@ -14,7 +14,7 @@
 */
 
 /*
-   note: autoformat screws the timetable up, need to adjust afterwards
+   note: autoformat in Arduino IDE screws the timetable up, need to adjust afterwards
    true = up, false = down
    pin 4 = D2
 */
@@ -35,8 +35,8 @@
 #include <TimeLib.h>
 
 #ifndef STASSID
-#define STASSID "xxxxxxxx"    //add WiFi network name here
-#define STAPSK  "xxxxxxxxxxxxx"  //add WiFi network password here
+#define STASSID "xxxxxxxx"    //add network name here
+#define STAPSK  "xxxxxxxxxxxxx"  //add network password here
 #endif
 #define OTA_PASSWORD "xxxxxxxxxxx"  //add OTA password here
 #define FRONT_ALL 7
@@ -69,7 +69,7 @@ int weather_data[3];
 byte date;
 
 
-//Shortend 
+//Shortend IR Codes
 bool r1_1[24] =    {0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1};
 bool r1_2[24] =    {0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0};
 bool r1_3[24] =    {0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0};
@@ -80,11 +80,19 @@ bool r1_all[24] =  {0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 bool r2[24] =      {0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0};
 bool r3[24] =      {0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0};
 
-const byte front_lock_dates[2][2] = {{16, 5}, {16, 8}};
+const byte front_lock_dates[2][2] = {{16, 5}, {16, 8}};  //Start(Day, Month), End(Day, Month)
 const byte front_ignore_dates = 0;
-const byte times[2][8][2][2] =  {{{{10, 30}, {13, 0}}, {{9, 30}, {13, 30}}, {{8, 0}, {14, 0}}, {{6,  30}, {16, 30}}, {{8,   0}, {14, 0}}, {{8, 30}, {13, 30}}, {{9, 30}, {13, 0}}, {{10, 30}, {13, 0}}},  //times ignore daylight saving time
-                                 {{{0,   0}, {0,  0}}, {{0,  0}, {0,   0}}, {{0, 0}, {0,  0}}, {{11, 30}, {20, 30}}, {{11, 30}, {19, 0}}, {{12, 0}, {18,  0}}, {{0,  0}, {0,  0}}, {{0,   0}, {0,  0}}}}; //back shutters
+/* 
+   times ignore daylight saving time
+   timetable structure:
+   down{Hour, Minute}, up{Hour, Minute}    for all of the r1 shutters (includes fabric)
+   down{Hour, Minute}, up{Hour, Minute}    for the r2 and r3 shutters
+   from{Day, Month}                        end date is the start date of the next section
+*/
+const byte times[2][8][2][2] =  {{{{10, 30}, {13, 0}}, {{9, 30}, {13, 30}}, {{8, 0}, {14, 0}}, {{6,  30}, {16, 30}}, {{8,   0}, {14, 0}}, {{8, 30}, {13, 30}}, {{9, 30}, {13, 0}}, {{10, 30}, {13, 0}}}, 
+                                 {{{0,   0}, {0,  0}}, {{0,  0}, {0,   0}}, {{0, 0}, {0,  0}}, {{11, 30}, {20, 30}}, {{11, 30}, {19, 0}}, {{12, 0}, {18,  0}}, {{0,  0}, {0,  0}}, {{0,   0}, {0,  0}}}};
 const byte dates[9][2] =          {{1, 4},              {15, 4},             {1, 5},            {16, 5},              {1, 8},              {1, 9},              {16, 9},            {1, 10},           {20, 10}};
+
 byte current_times[2][2];
 
 MDNSResponder mdns;
@@ -99,7 +107,7 @@ EspClass ESPm;
 unsigned int localPort = 8888;
 time_t getNtpTime();
 
-void setup() {
+void setup() {    //set everything up
   Serial.begin(115200);
   Serial.println("Booting");
   WiFi.mode(WIFI_STA);
@@ -147,7 +155,7 @@ void setup() {
 
 
 
-String prepareHtmlPage(){
+String prepareHtmlPage(){     //HTML for the server
   String html_page =
      String("<!DOCTYPE HTML>") +
             "<html>" +
