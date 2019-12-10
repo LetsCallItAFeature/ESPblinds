@@ -1,5 +1,5 @@
 /*
-   RolloESP  V 1.0
+   ESPblinds  V 1.0
    
    - shutters controlled according to a timetable
    - includes locking front shutters down in summer (summer-lock)
@@ -63,7 +63,7 @@ int blink_time = 0;
 int last;
 bool blink_state = false;
 bool error_notification = false;
-bool r_state[3] = {true, true, true}; //0 = front shuttera, 1 = fabric, 2 = back shutters
+bool r_state[3] = {true, true, true}; //0 = front shutters, 1 = fabric, 2 = back shutters
 bool last_state[3] = {false, false, false};
 int weather_data[3];
 byte date;
