@@ -8,13 +8,19 @@
    - no updating/controlling in the night (semi low-power)
    - OTA uploading of sketches supported
    - experimental webserver
-
+   
+   
+   todo:
+   - have a log of all IR transmissions on the server to better check if a transmission has failed
+   - interface to change the timetable on the server
+   
+   
    by Kai Arnetzl
 
 */
 
 /*
-   note: autoformat in Arduino IDE screws the timetable up, need to adjust afterwards
+   note: autoformat in the Arduino IDE screws the timetable formatting up, need to adjust afterwards
    true = up, false = down
    pin 4 = D2
 */
@@ -54,8 +60,8 @@ const char* password = STAPSK;
 const long utcOffsetInSeconds = 3600;
 static const char ntpServerName[] = "us.pool.ntp.org";
 const int timeZone = 1;
-const int NTP_PACKET_SIZE = 48; // NTP time is in the first 48 bytes of message
-byte packetBuffer[NTP_PACKET_SIZE]; //buffer to hold incoming & outgoing packets
+const int NTP_PACKET_SIZE = 48;
+byte packetBuffer[NTP_PACKET_SIZE];
 
 bool first_time = true;
 int last_shutter = 0;
@@ -83,11 +89,12 @@ bool r3[24] =      {0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 
 const byte front_lock_dates[2][2] = {{16, 5}, {16, 8}};  //Start(Day, Month), End(Day, Month)
 const byte front_ignore_dates = 0;
 /* 
-   times ignore daylight saving time
+   times ignore daylight saving time, all times are UTC-1
    timetable structure:
    down{Hour, Minute}, up{Hour, Minute}    for all of the r1 shutters (includes fabric)
    down{Hour, Minute}, up{Hour, Minute}    for the r2 and r3 shutters
    from{Day, Month}                        end date is the start date of the next section
+   Setting a time to {0, 0} means that that action doesn't happen, so {{0, 0}, {0, 0}} means that the shutters will always stay up in that section.
 */
 const byte times[2][8][2][2] =  {{{{10, 30}, {13, 0}}, {{9, 30}, {13, 30}}, {{8, 0}, {14, 0}}, {{6,  30}, {16, 30}}, {{8,   0}, {14, 0}}, {{8, 30}, {13, 30}}, {{9, 30}, {13, 0}}, {{10, 30}, {13, 0}}}, 
                                  {{{0,   0}, {0,  0}}, {{0,  0}, {0,   0}}, {{0, 0}, {0,  0}}, {{11, 30}, {20, 30}}, {{11, 30}, {19, 0}}, {{12, 0}, {18,  0}}, {{0,  0}, {0,  0}}, {{0,   0}, {0,  0}}}};
