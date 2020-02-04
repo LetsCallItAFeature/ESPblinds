@@ -23,6 +23,15 @@
    note: autoformat in the Arduino IDE screws the timetable formatting up, need to adjust afterwards
    true = up, false = down
    pin 4 = D2
+	 
+	 RGB led colors:
+	 - white:  booting up
+   - green:  sending IR
+   - cyan:   getting data from the internet
+   - purple: sending a client page contents
+   - blue:   recieving a new scetch via OTA
+   - yellow: scheduled restart
+   - red blinking: no WiFi connection
 */
 
 
@@ -49,6 +58,9 @@
 #define BACK_MOST 8
 #define BACK_LAST 9
 #define ONE_WIRE_BUS 12
+#define red_pin 14   //D5
+#define green_pin 12 //D6
+#define blue_pin 13  //D7
 
 String api_key = "xxxxxxxxxxxxxxxxxxx";   //add DarkSky API key here
 String latitude = "xx.xxxx";     //add latitude of the blinds here
@@ -75,7 +87,7 @@ int weather_data[3];
 byte date;
 
 
-//Shortend IR Codes
+//Compressed IR Codes
 bool r1_1[24] =    {0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1};
 bool r1_2[24] =    {0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0};
 bool r1_3[24] =    {0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0};
@@ -128,8 +140,10 @@ void setup() {    //set everything up
   ArduinoOTA.onStart([]() {
   });
   ArduinoOTA.onEnd([]() {
+     digitalWrite(blue_pin, LOW);
   });
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+     analogWrite(blue_pin, map(progress, 0, total, 0, 255));
   });
   ArduinoOTA.onError([](ota_error_t error) {
     error_notification = true;
@@ -148,21 +162,32 @@ void setup() {    //set everything up
   Udp.begin(localPort);
   setSyncProvider(getNtpTime);
   server.on("/", handleRoot);
+  server.on("/log", handleLog);
+  server.on("/table", handleTable);
   server.onNotFound(handleNotFound);
   server.begin();
   MDNS.addService("http","tcp",80);
   pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
+  pinMode(red_pin, OUTPUT);
+  pinMode(green_pin, OUTPUT);
+  pinMode(blue_pin, OUTPUT);
   pinMode(4, OUTPUT);
-  for(int i = 511; i>0; i--){
-    analogWrite(LED_BUILTIN, i*2);
+  for(int i = 0; i<255; i++){
+    analogWrite(red_pin , i);
+    analogWrite(green_pin , i);
+    analogWrite(blue_pin , i);
     delay(2);
   }
-  digitalWrite(LED_BUILTIN, HIGH);
+  delay(1000);
+  digitalWrite(red_pin, LOW);
+  digitalWrite(green_pin, LOW);
+  digitalWrite(blue_pin, LOW);
 }
 
 
-
-String prepareHtmlPage(){     //HTML for the server
+//todo: progmem
+String prepareRootPage(){     //HTML for the server
   String html_page =
      String("<!DOCTYPE HTML>") +
             "<html>" +
@@ -171,7 +196,9 @@ String prepareHtmlPage(){     //HTML for the server
                 "<meta http-equiv='refresh' content='150'/>" +
               "</head>" +
               "<body>" +
-                "<h1>ESP Rollo - Server</h1>" +
+	  						"<CENTER>" +
+                	"<h1>ESP Rollo - Server</h1>" +
+	  						"</CENTER>" +
                 "<p><sup>" + timeAsString() + "</sup></p>" +
                 "<p>Roll&aumlden zur Stra&szlige: " + expressState(0) + "</p>" +
                 "<p>" + showCurrentTimes(0) + "<p>" +
@@ -192,10 +219,54 @@ String prepareHtmlPage(){     //HTML for the server
     return html_page;
 }
 
+String prepareLogPage(){     //HTML for the server
+  String html_page =
+     String("<!DOCTYPE HTML>") +
+            "<html>" +
+              "<head>" +
+                "<title>ESP Rollo Log</title>" +
+                "<meta http-equiv='refresh' content='150'/>" +
+              "</head>" +
+              "<body>" +
+	  						"<CENTER>" +
+                	"<h1>ESP Rollo - Log</h1>" +
+	  						"</CENTER>" +
+                "<p>Alle an die Rollos gesendeten Befehle seit Anfang des Monats.</p>" +
+	  						"<p>Wird auch bei Stromverlust, Resets und Abstürzen geleert.</p>" +
+              "</body>" +
+            "</html>" +
+            "\r\n";
+    return html_page;
+}
+
+String prepareTablePage(){     //HTML for the server
+  String html_page =
+     String("<!DOCTYPE HTML>") +
+            "<html>" +
+              "<head>" +
+                "<title>ESP Rollo Zeiten und Werte</title>" +
+                "<meta http-equiv='refresh' content='150'/>" +
+              "</head>" +
+              "<body>" +
+	  						"<CENTER>" +
+                	"<h1>ESP Rollo - Zeitplan</h1>" +
+	  						"</CENTER>" +
+                "<p>Der Zeitplan sowie die Wetter-Schwellwerte.</p>" +
+	  						"<p>Alle Änderungen bleiben auch bei Stromverlust gespeichert.</p>" +
+              "</body>" +
+            "</html>" +
+            "\r\n";
+    return html_page;
+}
+
 void handleRoot() {
   char temp[400];
-  server.send(200, "text/html", prepareHtmlPage());
+  digitalWrite(red_pin, HIGH);
+  digitalWrite(blue_pin, HIGH);
+  server.send(200, "text/html", prepareRootPage());
   server.send(200, "text/html", temp);
+  digitalWrite(red_pin, LOW);
+  digitalWrite(blue_pin, LOW);
 }
 
 void handleNotFound() {
@@ -211,8 +282,11 @@ void handleNotFound() {
   for (uint8_t i = 0; i < server.args(); i++) {
     message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
   }
-
+  digitalWrite(red_pin, HIGH);
+  digitalWrite(blue_pin, HIGH);
   server.send(404, "text/plain", message);
+  digitalWrite(red_pin, LOW);
+  digitalWrite(blue_pin, LOW);
 }
 
 uint16_t* translate(bool data[], int nr, bool dir) {
@@ -251,9 +325,9 @@ uint16_t* translate(bool data[], int nr, bool dir) {
 }
 
 void sendIr(uint16_t data[]) {
-  digitalWrite(LED_BUILTIN, LOW);
+  digitalWrite(green_pin, HIGH);
   irsend.sendRaw(data , 48, 36);
-  digitalWrite(LED_BUILTIN, HIGH);
+  digitalWrite(green_pin, LOW);
 }
 
 int* getWeather() {
@@ -262,7 +336,11 @@ int* getWeather() {
   DSW_hourly *hourly = new DSW_hourly;
   DSW_daily *daily = new DSW_daily;
   time_t time;
+  digitalWrite(green_pin, HIGH);
+  digitalWrite(blue_pin, HIGH);
   dsw.getForecast(current, hourly, daily, api_key, latitude, longitude, units, language);
+  digitalWrite(green_pin, LOW);
+  digitalWrite(blue_pin, LOW);
   weather[0] = current->precipProbability;
   weather[1] = current->cloudCover;
   weather[2] = current->humidity;
@@ -437,18 +515,7 @@ String temperatureString(float temp){
   return result;
 }
 
-void handleError() {
-  if (error_notification == true && (millis() - blink_time >= 1000)) {
-    blink_state = !blink_state;
-    blink_time = millis();
-    if(blink_state == true){
-      digitalWrite(LED_BUILTIN, HIGH);
-    }
-    else{
-      digitalWrite(LED_BUILTIN, LOW);
-    }
-  }
-}
+
 
 
 time_t getNtpTime() {
@@ -456,6 +523,8 @@ time_t getNtpTime() {
 
   while (Udp.parsePacket() > 0) ; // discard any previously received packets
   // get a random server from the pool
+  digitalWrite(green_pin, HIGH);
+  digitalWrite(blue_pin, HIGH);
   WiFi.hostByName(ntpServerName, ntpServerIP);
   sendNTPpacket(ntpServerIP);
   uint32_t beginWait = millis();
@@ -463,6 +532,8 @@ time_t getNtpTime() {
     int size = Udp.parsePacket();
     if (size >= NTP_PACKET_SIZE) {
       Udp.read(packetBuffer, NTP_PACKET_SIZE);  // read packet into the buffer
+      digitalWrite(green_pin, LOW);
+      digitalWrite(blue_pin, LOW);
       unsigned long secsSince1900;
       // convert four bytes starting at location 40 to a long integer
       secsSince1900 =  (unsigned long)packetBuffer[40] << 24;
@@ -510,7 +581,6 @@ void loop() {
       server.handleClient();
       delay(1);
     }
-    handleError();
     if (now() >= last_shutter + 300) {
       last_shutter = now();
       controllShutter();
