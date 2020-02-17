@@ -8,6 +8,7 @@
    - no updating/controlling in the night (semi low-power)
    - OTA uploading of sketches supported
    - experimental webserver
+   - RGB led indicates events like sending data
    
    
    todo:
@@ -31,7 +32,7 @@
 	 - purple: sending a client page contents
 	 - blue:   recieving a new scetch via OTA
 	 - yellow: scheduled restart
-	 - red blinking: no WiFi connection
+	 - red blinking: no WiFi connection/not reading temperature sensor
 */
 
 
@@ -39,6 +40,7 @@
 #include <ESP8266mDNS.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266WiFi.h>
+#include <ESP8266mDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 #include <IRremoteESP8266.h>
@@ -159,6 +161,7 @@ void setup() {    //set everything up
   }
   sensors.begin();
   irsend.begin();
+	MDNS.begin("ESPblinds")
   setSyncInterval(300);
   Udp.begin(localPort);
   setSyncProvider(getNtpTime);
@@ -215,6 +218,9 @@ String prepareRootPage(){     //HTML for the server
                 "<p>Niederschlagswahrscheinlichkeit: " + getDarksky(0) + "&#037</p>" +
                 "<p>Wolkenbedeckung: " + getDarksky(1) + "&#037</p>" +
                 "<p>Luftfeuchtigkeit: " + getDarksky(2) + "&#037</p>" +
+                "<p>&nbsp;</p>" +
+								"<a href=" + char(34) + "ESPblinds.local/table" + char(34) + "> Zeiten und Schwellwerte</a>" +
+                "<a href=" + char(34) + "ESPblinds.local/log" + char(34) + "> Sende-Log</a>" +
               "</body>" +
             "</html>" +
             "\r\n";
