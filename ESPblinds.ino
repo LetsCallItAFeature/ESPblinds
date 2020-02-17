@@ -279,7 +279,7 @@ void addToLog(String text) {
 }
 
 String getLog() {
-	
+	return Log;
 }
 
 void handleNotFound() {
@@ -370,7 +370,7 @@ String timeAsString(){
 
 void moveShutter(int nr, bool dir) {
   uint16_t *arr;
-	String to_log = "Sende Anweisung: Fahre Gruppe " + String(nr);
+	String to_log = "Gruppe " + String(nr);
 	if dir = true {
 		to_log += " hoch.";
 	} 
@@ -418,7 +418,7 @@ void controllShutter() {    //also updates global weather array (weather_data)
   if (weather_data[0] > 20 || weather_data[1] > 60 || weather_data[2] > 90) {
     r_state[1] = true;
 		if r_state[1] != last_state[1] {
-			addToLog("Stoffrollos werden aufgrund des Wetters hochgefahren. Niederschlagswahrscheinlichkeit: "+ weather_data[0] + "&#037, Wolkenbedeckung: " + weather_data[1] + "&#037, Luftfeuchtigkeit: " + weather_data[2] + "&#037";
+			addToLog("Gruppe 1 hoch: Nds: "+ weather_data[0] + "&#037, Wolken: " + weather_data[1] + "&#037, Feucht: " + weather_data[2] + "&#037";
   }
   r_state[0] = scheduleState(0);  //decide for normal shutters
   r_state[2] = scheduleState(2);
@@ -494,7 +494,7 @@ int timeToMins(byte _hour, byte _minute){
    return minutes_since_0;
 }
 
-int dailyTime(byte nr, bool direction){
+int dailyTime(byte nr, bool direction){		//calculates the times the given group has to move in the specified direction on the current day
    int time_diff;
    int date_diff;
    int og_date_diff;
