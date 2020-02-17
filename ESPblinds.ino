@@ -26,12 +26,12 @@
 	 
 	 RGB led colors:
 	 - white:  booting up
-   - green:  sending IR
-   - cyan:   getting data from the internet
-   - purple: sending a client page contents
-   - blue:   recieving a new scetch via OTA
-   - yellow: scheduled restart
-   - red blinking: no WiFi connection
+	 - green:  sending IR
+	 - cyan:   getting data from the internet
+	 - purple: sending a client page contents
+	 - blue:   recieving a new scetch via OTA
+	 - yellow: scheduled restart
+	 - red blinking: no WiFi connection
 */
 
 
@@ -75,6 +75,7 @@ const int timeZone = 1;
 const int NTP_PACKET_SIZE = 48;
 byte packetBuffer[NTP_PACKET_SIZE];
 
+String log = ""
 bool first_time = true;
 int last_shutter = 0;
 int blink_time = 0;
@@ -183,6 +184,7 @@ void setup() {    //set everything up
   digitalWrite(red_pin, LOW);
   digitalWrite(green_pin, LOW);
   digitalWrite(blue_pin, LOW);
+	addToLog("Hochgefahren, Setup beendet.");
 }
 
 
@@ -233,6 +235,9 @@ String prepareLogPage(){     //HTML for the server
 	  						"</CENTER>" +
                 "<p>Alle an die Rollos gesendeten Befehle seit Anfang des Monats.</p>" +
 	  						"<p>Wird auch bei Stromverlust, Resets und Abstürzen geleert.</p>" +
+								"<p>&nbsp;</p>" +
+								"<p>&nbsp;</p>" +
+								getLog() +
               "</body>" +
             "</html>" +
             "\r\n";
@@ -267,6 +272,14 @@ void handleRoot() {
   server.send(200, "text/html", temp);
   digitalWrite(red_pin, LOW);
   digitalWrite(blue_pin, LOW);
+}
+
+void addToLog(String text) {
+	Log += "<p>" + timeAsString() + ": " + Text + "</p>";
+}
+
+String getLog() {
+	
 }
 
 void handleNotFound() {
@@ -357,6 +370,15 @@ String timeAsString(){
 
 void moveShutter(int nr, bool dir) {
   uint16_t *arr;
+	String to_log = "Sende Anweisung: Fahre Gruppe " + String(nr);
+	if dir = true {
+		to_log += " hoch.";
+	} 
+	else {
+		to_log += " runter.";
+	}
+	
+	addToLog(
   switch (nr) {
     case 0:
       arr = translate(r1_2, 2, dir);
@@ -395,6 +417,8 @@ void controllShutter() {    //also updates global weather array (weather_data)
   r_state[1] = scheduleState(1);
   if (weather_data[0] > 20 || weather_data[1] > 60 || weather_data[2] > 90) {
     r_state[1] = true;
+		if r_state[1] != last_state[1] {
+			addToLog("Stoffrollos werden aufgrund des Wetters hochgefahren. Niederschlagswahrscheinlichkeit: "+ weather_data[0] + "&#037, Wolkenbedeckung: " + weather_data[1] + "&#037, Luftfeuchtigkeit: " + weather_data[2] + "&#037";
   }
   r_state[0] = scheduleState(0);  //decide for normal shutters
   r_state[2] = scheduleState(2);
