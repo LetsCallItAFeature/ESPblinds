@@ -115,6 +115,58 @@ const byte times[2][8][2][2] =  {{{{10, 30}, {13, 0}}, {{9, 30}, {13, 30}}, {{8,
                                  {{{0,   0}, {0,  0}}, {{0,  0}, {0,   0}}, {{0, 0}, {0,  0}}, {{11, 30}, {20, 30}}, {{11, 30}, {19, 0}}, {{12, 0}, {18,  0}}, {{0,  0}, {0,  0}}, {{0,   0}, {0,  0}}}};
 const byte dates[9][2] =          {{1, 4},              {15, 4},             {1, 5},            {16, 5},              {1, 8},              {1, 9},              {16, 9},            {1, 10},           {20, 10}};
 
+//html for the server
+const PROGMEM char * root_page = "<!DOCTYPE HTML>"
+            "<html>"
+              "<head>"
+                "<title>ESP Rollo</title>"
+                "<meta http-equiv='refresh' content='60'/>"
+              "</head>"
+              "<body>"
+	  						"<CENTER>"
+                	"<h1>ESP Rollo - Server</h1>"
+	  						"</CENTER>"
+                "<p><sup>" + timeAsString() + "</sup></p>"
+                "<p>Roll&aumlden zur Stra&szlige: " + expressState(0) + "</p>"
+                "<p>" + showCurrentTimes(0) + "<p>"
+                "<p>Roll&aumlden zum Garten: " + expressState(2) + "</p>"
+                "<p>" + showCurrentTimes(2) + "<p>"
+                "<p>Stoffroll&aumlden: " + expressState(1) + "</p>"
+                "<p>" + showCurrentTimes(1) + "</p>"
+                "<p>&nbsp;</p>"
+                "<p>Temperatur Dachboden: " + temperatureString(getTemperature()) + "</p>"
+                "<p>&nbsp;</p>"
+                "<p>Wetter laut Darksky</p>"
+                "<p>Niederschlagswahrscheinlichkeit: " + getDarksky(0) + "&#037</p>"
+                "<p>Wolkenbedeckung: " + getDarksky(1) + "&#037</p>"
+                "<p>Luftfeuchtigkeit: " + getDarksky(2) + "&#037</p>"
+                "<p>&nbsp;</p>"
+								"<a href=\"/values\">Zeiten und Schwellwerte</a>"
+                "<a href=\"/log\">Sende-Log</a>"
+              "</body>"
+            "</html>";
+
+const PROGMEM char * log_page = "<!DOCTYPE HTML>"
+            "<html>"
+              "<head>"
+                "<title>ESP Rollo Log</title>"
+                "<meta http-equiv='refresh' content='60'/>"
+              "</head>"
+              "<body>"
+	  						"<CENTER>"
+                	"<h1>ESP Rollo - Log</h1>"
+	  						"</CENTER>"
+								"<p><sup>" + timeAsString() + "</sup></p>"
+                "<p>Alle an die Rollos gesendeten Befehle seit Anfang des Monats.</p>"
+	  						"<p>Wird auch bei Stromverlust, Resets und Abstürzen geleert.</p>"
+								"<p>&nbsp;</p>"
+								"<a href=" + char(34) + "/" + char(34) + "> Zurück</a>"
+								"<p>&nbsp;</p>"
+								"<p>&nbsp;</p>"
+								getLog()
+              "</body>"
+            "</html>";
+
 byte current_times[2][2];
 
 MDNSResponder mdns;
@@ -167,7 +219,7 @@ void setup() {    //set everything up
   setSyncProvider(getNtpTime);
   server.on("/", handleRoot);
   server.on("/log", handleLog);
-  server.on("/table", handleTable);
+  server.on("/values", handleTable);
   server.onNotFound(handleNotFound);
   server.begin();
   MDNS.addService("http","tcp",80);
@@ -191,101 +243,32 @@ void setup() {    //set everything up
 }
 
 
-//todo: progmem
-String prepareRootPage(){     //HTML for the server
-  String html_page =
-     String("<!DOCTYPE HTML>") +
-            "<html>" +
-              "<head>" +
-                "<title>ESP Rollo</title>" +
-                "<meta http-equiv='refresh' content='150'/>" +
-              "</head>" +
-              "<body>" +
-	  						"<CENTER>" +
-                	"<h1>ESP Rollo - Server</h1>" +
-	  						"</CENTER>" +
-                "<p><sup>" + timeAsString() + "</sup></p>" +
-                "<p>Roll&aumlden zur Stra&szlige: " + expressState(0) + "</p>" +
-                "<p>" + showCurrentTimes(0) + "<p>" +
-                "<p>Roll&aumlden zum Garten: " + expressState(2) + "</p>" +
-                "<p>" + showCurrentTimes(2) + "<p>" +
-                "<p>Stoffroll&aumlden: " + expressState(1) + "</p>" +
-                "<p>" + showCurrentTimes(1) + "<p>" +
-                "<p>&nbsp;</p>" +
-                "<p>Temperatur Dachboden: " + temperatureString(getTemperature()) + "</p>" +
-                "<p>&nbsp;</p>" +
-                "<p>Wetter laut Darksky</p>" +
-                "<p>Niederschlagswahrscheinlichkeit: " + getDarksky(0) + "&#037</p>" +
-                "<p>Wolkenbedeckung: " + getDarksky(1) + "&#037</p>" +
-                "<p>Luftfeuchtigkeit: " + getDarksky(2) + "&#037</p>" +
-                "<p>&nbsp;</p>" +
-								"<a href=" + char(34) + "ESPblinds.local/table" + char(34) + "> Zeiten und Schwellwerte</a>" +
-                "<a href=" + char(34) + "ESPblinds.local/log" + char(34) + "> Sende-Log</a>" +
-              "</body>" +
-            "</html>" +
-            "\r\n";
-    return html_page;
-}
-
-String prepareLogPage(){     //HTML for the server
-  String html_page =
-     String("<!DOCTYPE HTML>") +
-            "<html>" +
-              "<head>" +
-                "<title>ESP Rollo Log</title>" +
-                "<meta http-equiv='refresh' content='150'/>" +
-              "</head>" +
-              "<body>" +
-	  						"<CENTER>" +
-                	"<h1>ESP Rollo - Log</h1>" +
-	  						"</CENTER>" +
-                "<p>Alle an die Rollos gesendeten Befehle seit Anfang des Monats.</p>" +
-	  						"<p>Wird auch bei Stromverlust, Resets und Abstürzen geleert.</p>" +
-								"<p>&nbsp;</p>" +
-								"<p>&nbsp;</p>" +
-								getLog() +
-              "</body>" +
-            "</html>" +
-            "\r\n";
-    return html_page;
-}
-
-String prepareTablePage(){     //HTML for the server
-  String html_page =
-     String("<!DOCTYPE HTML>") +
-            "<html>" +
-              "<head>" +
-                "<title>ESP Rollo Zeiten und Werte</title>" +
-                "<meta http-equiv='refresh' content='150'/>" +
-              "</head>" +
-              "<body>" +
-	  						"<CENTER>" +
-                	"<h1>ESP Rollo - Zeitplan</h1>" +
-	  						"</CENTER>" +
-                "<p>Der Zeitplan sowie die Wetter-Schwellwerte.</p>" +
-	  						"<p>Alle Änderungen bleiben auch bei Stromverlust gespeichert.</p>" +
-              "</body>" +
-            "</html>" +
-            "\r\n";
-    return html_page;
-}
-
 void handleRoot() {
   char temp[400];
   digitalWrite(red_pin, HIGH);
   digitalWrite(blue_pin, HIGH);
-  server.send(200, "text/html", prepareRootPage());
+  server.send(200, "text/html", root_page);
+  server.send(200, "text/html", temp);
+  digitalWrite(red_pin, LOW);
+  digitalWrite(blue_pin, LOW);
+}
+
+void handleLog() {
+  char temp[400];
+  digitalWrite(red_pin, HIGH);
+  digitalWrite(blue_pin, HIGH);
+  server.send(200, "text/html", log_page);
   server.send(200, "text/html", temp);
   digitalWrite(red_pin, LOW);
   digitalWrite(blue_pin, LOW);
 }
 
 void addToLog(String text) {
-	Log += "<p>" + timeAsString() + ": " + Text + "</p>";
+	log += "<p>" + timeAsString() + ": " + Text + "</p>";
 }
 
 String getLog() {
-	return Log;
+	return log;
 }
 
 void handleNotFound() {
@@ -308,10 +291,10 @@ void handleNotFound() {
   digitalWrite(blue_pin, LOW);
 }
 
-uint16_t* translate(bool data[], int nr, bool dir) {
+uint16_t* translate(bool data[], int nr, bool direction) {
   uint16_t *real_data = new uint16_t[48];
   real_data[47] = 1000;
-  if (dir == false) {
+  if (direction == false) {
     data[1] = 1;
     if (nr == 1) {
       data[21] = 1;
@@ -374,41 +357,41 @@ String timeAsString(){
   return real_time;
 }
 
-void moveShutter(int nr, bool dir) {
+void moveShutter(int nr, bool direction) {
   uint16_t *arr;
 	String to_log = "Gruppe " + String(nr);
-	if dir = true {
+	if direction = true {
 		to_log += " hoch.";
 	} 
 	else {
 		to_log += " runter.";
 	}
 	
-	addToLog(
+	addToLog(to_log)
   switch (nr) {
     case 0:
-      arr = translate(r1_2, 2, dir);
+      arr = translate(r1_2, 2, direction);
       sendIr(arr);
       delay(20);
-      arr = translate(r1_3, 3, dir);
+      arr = translate(r1_3, 3, direction);
       sendIr(arr);
       delay(20);
-      arr = translate(r1_5, 5, dir);
+      arr = translate(r1_5, 5, direction);
       sendIr(arr);
       delay(20);
-      arr = translate(r1_6, 6, dir);
+      arr = translate(r1_6, 6, direction);
       sendIr(arr);
     case 1:
-      arr = translate(r1_1, 1, dir);
+      arr = translate(r1_1, 1, direction);
       sendIr(arr);
       delay(20);
-      arr = translate(r1_4, 4, dir);
+      arr = translate(r1_4, 4, direction);
       sendIr(arr);
     case 2:
-      arr = translate(r2, BACK_MOST, dir);
+      arr = translate(r2, BACK_MOST, direction);
       sendIr(arr);
       delay(20);
-      arr = translate(r3, BACK_LAST, dir);
+      arr = translate(r3, BACK_LAST, direction);
       sendIr(arr);
   }
   delete []arr;
@@ -500,7 +483,7 @@ int timeToMins(byte _hour, byte _minute){
    return minutes_since_0;
 }
 
-int dailyTime(byte nr, bool direction){		//calculates the times the given group has to move in the specified direction on the current day
+int dailyTime(byte nr, bool direction){		//calculates the times the given group has to move in the specified direction on the current day for a smooth transition
    int time_diff;
    int date_diff;
    int og_date_diff;
