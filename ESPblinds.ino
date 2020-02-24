@@ -5,7 +5,6 @@
    - includes locking front shutters down in summer (summer-lock)
    - fabric shutters controlled according to a timetable and weather
    - all shutters up during the night unless summer-locked
-   - no updating/controlling in the night (semi low-power)
    - OTA uploading of sketches supported
    - experimental webserver
    - RGB led indicates events like sending data
@@ -79,11 +78,12 @@ byte packetBuffer[NTP_PACKET_SIZE];
 
 String log = ""
 bool first_time = true;
-int last_shutter = 0;
-int blink_time = 0;
 int last;
 bool blink_state = false;
 bool error_notification = false;
+bool error_blink_state = false;
+byte check_day = 0;
+byte check_month = 0;
 bool r_state[3] = {true, true, true}; //0 = front shutters, 1 = fabric, 2 = back shutters
 bool last_state[3] = {false, false, false};
 int weather_data[3];
@@ -160,10 +160,10 @@ const PROGMEM char * log_page = "<!DOCTYPE HTML>"
                 "<p>Alle an die Rollos gesendeten Befehle seit Anfang des Monats.</p>"
 	  						"<p>Wird auch bei Stromverlust, Resets und Abstürzen geleert.</p>"
 								"<p>&nbsp;</p>"
-								"<a href=" + char(34) + "/" + char(34) + "> Zurück</a>"
+								"<a href=\"/\"> Zurück</a>"
 								"<p>&nbsp;</p>"
-								"<p>&nbsp;</p>"
-								getLog()
+								"<p>&nbsp;</p>" +
+								getLog() +
               "</body>"
             "</html>";
 
@@ -180,6 +180,8 @@ WiFiUDP Udp;
 EspClass ESPm;
 unsigned int localPort = 8888;
 time_t getNtpTime();
+
+//********************************setup function***************************************
 
 void setup() {    //set everything up
   Serial.begin(115200);
@@ -208,21 +210,21 @@ void setup() {    //set everything up
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  if(!mdns.begin("rollo", WiFi.localIP())){
+  if(!MDNS.begin("rollos", WiFi.localIP())){
     Serial.println("MDNS error :(");
   }
   sensors.begin();
   irsend.begin();
-	MDNS.begin("ESPblinds")
   setSyncInterval(300);
   Udp.begin(localPort);
   setSyncProvider(getNtpTime);
   server.on("/", handleRoot);
   server.on("/log", handleLog);
-  server.on("/values", handleTable);
+  //server.on("/values", handleTable);	Not yet implemented
   server.onNotFound(handleNotFound);
   server.begin();
   MDNS.addService("http","tcp",80);
+	check_month = month();
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
   pinMode(red_pin, OUTPUT);
@@ -242,6 +244,7 @@ void setup() {    //set everything up
 	addToLog("Hochgefahren, Setup beendet.");
 }
 
+//********************************regular functions***************************************
 
 void handleRoot() {
   char temp[400];
@@ -264,7 +267,7 @@ void handleLog() {
 }
 
 void addToLog(String text) {
-	log += "<p>" + timeAsString() + ": " + Text + "</p>";
+	log += "<p>" + timeAsString() + ": " + text + "</p>";
 }
 
 String getLog() {
@@ -366,8 +369,8 @@ void moveShutter(int nr, bool direction) {
 	else {
 		to_log += " runter.";
 	}
-	
 	addToLog(to_log)
+	
   switch (nr) {
     case 0:
       arr = translate(r1_2, 2, direction);
@@ -528,8 +531,12 @@ String temperatureString(float temp){
   return result;
 }
 
-
-
+void handleError(){
+	if(error_notification = true){
+		error_blink_state = !error_blink_state;
+		digitalWrite(red_pin, error_blink_state);
+	}
+}
 
 time_t getNtpTime() {
   IPAddress ntpServerIP; // NTP server's ip address
@@ -581,23 +588,28 @@ void sendNTPpacket(IPAddress &address)
   Udp.endPacket();
 }
 
+		 
+//********************************Main loop***************************************
 void loop() {
-  while (hour() >= 6 && hour() <= 24) {
+	if(month() != check_month){	//check if its a new month
+		ESP.restart();	//restart every month to prevent problems from building up
+	}
+	if(day() != check_day){	//check if its a new day
     updateDate();
     current_times[0][0] = dailyTime(0, false);
     current_times[0][1] = dailyTime(0, true);
     current_times[1][0] = dailyTime(1, false);
     current_times[1][1] = dailyTime(1, true);
-    last = millis();
-    while (millis() - last < 50){
-      ArduinoOTA.handle();
-      server.handleClient();
-      delay(1);
-    }
-    if (now() >= last_shutter + 300) {
-      last_shutter = now();
-      controllShutter();
-    }
-  }
-  delay(1800000); //wait 0.5 hours
+		check_day = day();
+	}
+	for(int i = 0; i < 600; i++){	//total time of 300000ms = 5 minutes
+		last = millis();
+  	while (millis() - last < 500){	//timing of the error blinking without needing a second millis comparison
+			ArduinoOTA.handle();
+    	server.handleClient();
+    	delay(1);		//give the ESP some rest. Because the two handle functions also take some time each loop actually takes more than 1ms so the total wait time is also above 5 mins but who cares
+   	}
+		handleError();
+	}
+  controllShutter();
 }
