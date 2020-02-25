@@ -22,7 +22,7 @@
 /*
    note: autoformat in the Arduino IDE screws the timetable formatting up, need to adjust afterwards
    true = up, false = down
-   pin 4 = D2
+	 
 	 
 	 RGB led colors:
 	 - white:  booting up
@@ -59,9 +59,11 @@
 #define BACK_MOST 8
 #define BACK_LAST 9
 #define ONE_WIRE_BUS 12
-#define red_pin 14   //D5
-#define green_pin 12 //D6
-#define blue_pin 13  //D7
+#define BUTTON_PIN 5 //D1
+#define IR_PIN 4		 //D2
+#define RED_PIN 14   //D5
+#define GREEN_PIN 12 //D6
+#define BLUE_PIN 13  //D7
 
 String api_key = "xxxxxxxxxxxxxxxxxxx";   //add DarkSky API key here
 String latitude = "xx.xxxx";     //add latitude of the blinds here
@@ -77,7 +79,7 @@ const int NTP_PACKET_SIZE = 48;
 byte packetBuffer[NTP_PACKET_SIZE];
 
 String log = ""
-bool first_time = true;
+bool must_send = true;
 int last;
 bool blink_state = false;
 bool error_notification = false;
@@ -226,21 +228,22 @@ void setup() {    //set everything up
   MDNS.addService("http","tcp",80);
 	check_month = month();
   pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH);
-  pinMode(red_pin, OUTPUT);
-  pinMode(green_pin, OUTPUT);
-  pinMode(blue_pin, OUTPUT);
-  pinMode(4, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH); //turn internal LED off (states are inverted) because you can't see it
+  pinMode(RED_PIN, OUTPUT);
+  pinMode(GREEN_PIN, OUTPUT);
+  pinMode(BLUE_PIN, OUTPUT);
+  pinMode(IR_PIN, OUTPUT);
+	pinMode(BUTTON_PIN, INPUT);
   for(int i = 0; i<255; i++){
-    analogWrite(red_pin , i);
-    analogWrite(green_pin , i);
-    analogWrite(blue_pin , i);
+    analogWrite(RED_PIN , i);
+    analogWrite(GREEN_PIN , i);
+    analogWrite(BLUE_PIN , i);
     delay(2);
   }
   delay(1000);
-  digitalWrite(red_pin, LOW);
-  digitalWrite(green_pin, LOW);
-  digitalWrite(blue_pin, LOW);
+  digitalWrite(RED_PIN, LOW);
+  digitalWrite(GREEN_PIN, LOW);
+  digitalWrite(BLUE_PIN, LOW);
 	addToLog("Hochgefahren, Setup beendet.");
 }
 
@@ -248,22 +251,22 @@ void setup() {    //set everything up
 
 void handleRoot() {
   char temp[400];
-  digitalWrite(red_pin, HIGH);
-  digitalWrite(blue_pin, HIGH);
+  digitalWrite(RED_PIN, HIGH);
+  digitalWrite(BLUE_PIN, HIGH);
   server.send(200, "text/html", root_page);
   server.send(200, "text/html", temp);
-  digitalWrite(red_pin, LOW);
-  digitalWrite(blue_pin, LOW);
+  digitalWrite(RED_PIN, LOW);
+  digitalWrite(BLUE_PIN, LOW);
 }
 
 void handleLog() {
   char temp[400];
-  digitalWrite(red_pin, HIGH);
-  digitalWrite(blue_pin, HIGH);
+  digitalWrite(RED_PIN, HIGH);
+  digitalWrite(BLUE_PIN, HIGH);
   server.send(200, "text/html", log_page);
   server.send(200, "text/html", temp);
-  digitalWrite(red_pin, LOW);
-  digitalWrite(blue_pin, LOW);
+  digitalWrite(RED_PIN, LOW);
+  digitalWrite(BLUE_PIN, LOW);
 }
 
 void addToLog(String text) {
@@ -287,11 +290,11 @@ void handleNotFound() {
   for (uint8_t i = 0; i < server.args(); i++) {
     message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
   }
-  digitalWrite(red_pin, HIGH);
-  digitalWrite(blue_pin, HIGH);
+  digitalWrite(RED_PIN, HIGH);
+  digitalWrite(BLUE_PIN, HIGH);
   server.send(404, "text/plain", message);
-  digitalWrite(red_pin, LOW);
-  digitalWrite(blue_pin, LOW);
+  digitalWrite(RED_PIN, LOW);
+  digitalWrite(BLUE_PIN, LOW);
 }
 
 uint16_t* translate(bool data[], int nr, bool direction) {
@@ -330,9 +333,9 @@ uint16_t* translate(bool data[], int nr, bool direction) {
 }
 
 void sendIr(uint16_t data[]) {
-  digitalWrite(green_pin, HIGH);
+  digitalWrite(GREEN_PIN, HIGH);
   irsend.sendRaw(data , 48, 36);
-  digitalWrite(green_pin, LOW);
+  digitalWrite(GREEN_PIN, LOW);
 }
 
 int* getWeather() {
@@ -341,11 +344,11 @@ int* getWeather() {
   DSW_hourly *hourly = new DSW_hourly;
   DSW_daily *daily = new DSW_daily;
   time_t time;
-  digitalWrite(green_pin, HIGH);
-  digitalWrite(blue_pin, HIGH);
+  digitalWrite(GREEN_PIN, HIGH);
+  digitalWrite(BLUE_PIN, HIGH);
   dsw.getForecast(current, hourly, daily, api_key, latitude, longitude, units, language);
-  digitalWrite(green_pin, LOW);
-  digitalWrite(blue_pin, LOW);
+  digitalWrite(GREEN_PIN, LOW);
+  digitalWrite(BLUE_PIN, LOW);
   weather[0] = current->precipProbability;
   weather[1] = current->cloudCover;
   weather[2] = current->humidity;
@@ -401,11 +404,16 @@ void moveShutter(int nr, bool direction) {
 }
 
 void controllShutter() {    //also updates global weather array (weather_data)
-  int *temp_weather = getWeather();
-  weather_data[0] = temp_weather[0];
-  weather_data[1] = temp_weather[1];
-  weather_data[2] = temp_weather[2];
-  delete []temp_weather;
+  if(WiFi.status() == WL_CONNECTED){
+		int *temp_weather = getWeather();
+  	weather_data[0] = temp_weather[0];
+  	weather_data[1] = temp_weather[1];
+  	weather_data[2] = temp_weather[2];
+  	delete []temp_weather;
+	}
+	else{
+		error_notification = true;
+	}
   r_state[1] = scheduleState(1);
   if (weather_data[0] > 20 || weather_data[1] > 60 || weather_data[2] > 90) {
     r_state[1] = true;
@@ -416,13 +424,13 @@ void controllShutter() {    //also updates global weather array (weather_data)
   r_state[2] = scheduleState(2);
 
   for (int i = 0; i < 3; i++) {
-    if (r_state[i] != last_state[i] || first_time == true) {
+    if (r_state[i] != last_state[i] || must_send == true) {
       moveShutter(i, r_state[i]);
       delay(20);
       last_state[i] = r_state[i];
     }
   }
-  first_time = false;
+  must_send = false;
 }
 
 bool scheduleState(int shutters) {
@@ -534,36 +542,42 @@ String temperatureString(float temp){
 void handleError(){
 	if(error_notification = true){
 		error_blink_state = !error_blink_state;
-		digitalWrite(red_pin, error_blink_state);
+		digitalWrite(RED_PIN, error_blink_state);
 	}
 }
 
 time_t getNtpTime() {
-  IPAddress ntpServerIP; // NTP server's ip address
+  if(WiFi.status() == WL_CONNECTED){
+		IPAddress ntpServerIP; // NTP server's ip address
 
-  while (Udp.parsePacket() > 0) ; // discard any previously received packets
-  // get a random server from the pool
-  digitalWrite(green_pin, HIGH);
-  digitalWrite(blue_pin, HIGH);
-  WiFi.hostByName(ntpServerName, ntpServerIP);
-  sendNTPpacket(ntpServerIP);
-  uint32_t beginWait = millis();
-  while (millis() - beginWait < 1500) {
-    int size = Udp.parsePacket();
-    if (size >= NTP_PACKET_SIZE) {
-      Udp.read(packetBuffer, NTP_PACKET_SIZE);  // read packet into the buffer
-      digitalWrite(green_pin, LOW);
-      digitalWrite(blue_pin, LOW);
-      unsigned long secsSince1900;
-      // convert four bytes starting at location 40 to a long integer
-      secsSince1900 =  (unsigned long)packetBuffer[40] << 24;
-      secsSince1900 |= (unsigned long)packetBuffer[41] << 16;
-      secsSince1900 |= (unsigned long)packetBuffer[42] << 8;
-      secsSince1900 |= (unsigned long)packetBuffer[43];
-      return secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR;
-    }
-  }
-  return 0; // return 0 if unable to get the time
+		while (Udp.parsePacket() > 0) ; // discard any previously received packets
+		// get a random server from the pool
+		digitalWrite(GREEN_PIN, HIGH);
+		digitalWrite(BLUE_PIN, HIGH);
+		WiFi.hostByName(ntpServerName, ntpServerIP);
+		sendNTPpacket(ntpServerIP);
+		uint32_t beginWait = millis();
+		while (millis() - beginWait < 1500) {
+			int size = Udp.parsePacket();
+			if (size >= NTP_PACKET_SIZE) {
+				Udp.read(packetBuffer, NTP_PACKET_SIZE);  // read packet into the buffer
+				digitalWrite(GREEN_PIN, LOW);
+				digitalWrite(BLUE_PIN, LOW);
+				unsigned long secsSince1900;
+				// convert four bytes starting at location 40 to a long integer
+				secsSince1900 =  (unsigned long)packetBuffer[40] << 24;
+				secsSince1900 |= (unsigned long)packetBuffer[41] << 16;
+				secsSince1900 |= (unsigned long)packetBuffer[42] << 8;
+				secsSince1900 |= (unsigned long)packetBuffer[43];
+				return secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR;
+			}
+		}
+		return 0; // return 0 if unable to get the time
+	}
+	else{
+		error_notification = true;
+		return 0;
+	}
 }
 
 void sendNTPpacket(IPAddress &address)
@@ -610,6 +624,13 @@ void loop() {
     	delay(1);		//give the ESP some rest. Because the two handle functions also take some time each loop actually takes more than 1ms so the total wait time is also above 5 mins but who cares
    	}
 		handleError();
+		if(digitalRead(BUTTON_PIN) == LOW){		//if the button is pressed, wait 3 seconds and then send the current states again
+			delay(3000);
+			for (int i = 0; i < 3; i++) {
+      	moveShutter(i, r_state[i]);
+      	delay(20);
+			}
+		}
 	}
   controllShutter();
 }
