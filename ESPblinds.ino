@@ -2,17 +2,11 @@
    ESPblinds  V 1.0
    
    - shutters controlled according to a timetable
-   - includes locking front shutters down in summer (summer-lock)
    - fabric shutters controlled according to a timetable and weather
-   - all shutters up during the night unless summer-locked
    - OTA uploading of sketches supported
    - experimental webserver
    - RGB led indicates events like sending data
-   
-   
-   todo:
-   - have a log of all IR transmissions on the server to better check if a transmission has failed
-   - interface to change the timetable on the server
+   - log of all IR transmissions on the server to better check if a transmission has failed
    
    
    by Kai Arnetzl
@@ -39,7 +33,6 @@
 #include <ESP8266mDNS.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266WiFi.h>
-#include <ESP8266mDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
 #include <IRremoteESP8266.h>
@@ -59,7 +52,6 @@
 #define BACK_MOST 8
 #define BACK_LAST 9
 #define ONE_WIRE_BUS 12
-#define BUTTON_PIN 5 //D1
 #define IR_PIN 4		 //D2
 #define RED_PIN 14   //D5
 #define GREEN_PIN 12 //D6
@@ -79,7 +71,7 @@ const int NTP_PACKET_SIZE = 48;
 byte packetBuffer[NTP_PACKET_SIZE];
 
 String log = ""
-bool must_send = true;
+bool sync_done = false;
 int last;
 bool blink_state = false;
 bool error_notification = false;
@@ -103,19 +95,17 @@ bool r1_all[24] =  {0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 bool r2[24] =      {0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0};
 bool r3[24] =      {0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 0};
 
-const byte front_lock_dates[2][2] = {{16, 5}, {16, 8}};  //Start(Day, Month), End(Day, Month)
-const byte front_ignore_dates = 0;
 /* 
    times ignore daylight saving time, all times are UTC-1
    timetable structure:
    down{Hour, Minute}, up{Hour, Minute}    for all of the r1 shutters (includes fabric)
    down{Hour, Minute}, up{Hour, Minute}    for the r2 and r3 shutters
    from{Day, Month}                        end date is the start date of the next section
-   Setting a time to {0, 0} means that that action doesn't happen, so {{0, 0}, {0, 0}} means that the shutters will always stay up in that section.
+   Setting a time to {254, x} means that the shutters wont go down that day, setting it to {255, x} means that the shutters wont go up that day
 */
-const byte times[2][8][2][2] =  {{{{10, 30}, {13, 0}}, {{9, 30}, {13, 30}}, {{8, 0}, {14, 0}}, {{6,  30}, {16, 30}}, {{8,   0}, {14, 0}}, {{8, 30}, {13, 30}}, {{9, 30}, {13, 0}}, {{10, 30}, {13, 0}}}, 
-                                 {{{0,   0}, {0,  0}}, {{0,  0}, {0,   0}}, {{0, 0}, {0,  0}}, {{11, 30}, {20, 30}}, {{11, 30}, {19, 0}}, {{12, 0}, {18,  0}}, {{0,  0}, {0,  0}}, {{0,   0}, {0,  0}}}};
-const byte dates[9][2] =          {{1, 4},              {15, 4},             {1, 5},            {16, 5},              {1, 8},              {1, 9},              {16, 9},            {1, 10},           {20, 10}};
+const byte times[2][9][2][2] =  {{{{10, 30}, {13, 0}},  {{9, 30},  {13, 30}}, {{8, 0},   {14, 0}},  {{255, 0}, {255, 0}}, {{255, 0}, {255, 0}}, {{8, 0},   {14, 0}}, 	{{8, 45}, {13, 30}}, {{9, 30},  {13, 0}},  {{10, 30}, {13, 0}}}, 
+                                 {{{254, 0}, {254, 0}}, {{254, 0}, {254, 0}}, {{254, 0}, {254, 0}}, {{11, 30}, {20, 30}}, {{11, 30}, {19,  0}}, {{11, 45}, {18, 30}},	{{12, 0}, {18, 0}},  {{254, 0}, {254, 0}}, {{254, 0}, {254, 0}}}};
+const byte dates[10][2] =          {{1, 4},              {15, 4},             {1, 5},            		{16, 5},              {1, 8},               {16, 8}, 							{1, 9},              {16, 9},            	 {1, 10},           {20, 10}};
 
 //html for the server
 const PROGMEM char * root_page = "<!DOCTYPE HTML>"
@@ -226,21 +216,19 @@ void setup() {    //set everything up
   server.onNotFound(handleNotFound);
   server.begin();
   MDNS.addService("http","tcp",80);
-	check_month = month();
+	check_month = month(localT());
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH); //turn internal LED off (states are inverted) because you can't see it
   pinMode(RED_PIN, OUTPUT);
   pinMode(GREEN_PIN, OUTPUT);
   pinMode(BLUE_PIN, OUTPUT);
   pinMode(IR_PIN, OUTPUT);
-	pinMode(BUTTON_PIN, INPUT);
   for(int i = 0; i<255; i++){
     analogWrite(RED_PIN , i);
     analogWrite(GREEN_PIN , i);
     analogWrite(BLUE_PIN , i);
     delay(2);
   }
-  delay(1000);
   digitalWrite(RED_PIN, LOW);
   digitalWrite(GREEN_PIN, LOW);
   digitalWrite(BLUE_PIN, LOW);
@@ -297,10 +285,10 @@ void handleNotFound() {
   digitalWrite(BLUE_PIN, LOW);
 }
 
-uint16_t* translate(bool data[], int nr, bool direction) {
+uint16_t* translate(bool data[], int nr, bool direction) { //decompresses the timing data for a given group and direction
   uint16_t *real_data = new uint16_t[48];
   real_data[47] = 1000;
-  if (direction == false) {
+  if (!direction) {
     data[1] = 1;
     if (nr == 1) {
       data[21] = 1;
@@ -334,7 +322,10 @@ uint16_t* translate(bool data[], int nr, bool direction) {
 
 void sendIr(uint16_t data[]) {
   digitalWrite(GREEN_PIN, HIGH);
-  irsend.sendRaw(data , 48, 36);
+	for(int i = 0; i < 3; i++){ //sends the data three times just to be sure
+		irsend.sendRaw(data , 48, 36);
+		delay(20)
+	}
   digitalWrite(GREEN_PIN, LOW);
 }
 
@@ -359,8 +350,8 @@ int* getWeather() {
 }
 
 String timeAsString(){
-  String real_time = String(hour()+1) + ":" + String(minute()) + ":" + String(second());
-  return real_time;
+	String real_time = String(hour(localT())) + ":" + String(minute(localT())) + ":" + String(second(localT()));
+	return real_time;
 }
 
 void moveShutter(int nr, bool direction) {
@@ -373,7 +364,6 @@ void moveShutter(int nr, bool direction) {
 		to_log += " runter.";
 	}
 	addToLog(to_log)
-	
   switch (nr) {
     case 0:
       arr = translate(r1_2, 2, direction);
@@ -403,7 +393,7 @@ void moveShutter(int nr, bool direction) {
   delete []arr;
 }
 
-void controllShutter() {    //also updates global weather array (weather_data)
+void controllShutter(bool must_send) {    //updates the states and the global weather array (weather_data)
   if(WiFi.status() == WL_CONNECTED){
 		int *temp_weather = getWeather();
   	weather_data[0] = temp_weather[0];
@@ -422,7 +412,6 @@ void controllShutter() {    //also updates global weather array (weather_data)
   }
   r_state[0] = scheduleState(0);  //decide for normal shutters
   r_state[2] = scheduleState(2);
-
   for (int i = 0; i < 3; i++) {
     if (r_state[i] != last_state[i] || must_send == true) {
       moveShutter(i, r_state[i]);
@@ -430,10 +419,9 @@ void controllShutter() {    //also updates global weather array (weather_data)
       last_state[i] = r_state[i];
     }
   }
-  must_send = false;
 }
 
-bool scheduleState(int shutters) {
+bool scheduleState(int shutters) { //calculates the states according to the schedule
   int nr = shutters;
   bool result = true;
   if (shutters == 1) {
@@ -442,12 +430,15 @@ bool scheduleState(int shutters) {
   else if (shutters == 2) {
     nr = 1;
   }
-  if (date != -1 && date != 8 && times[nr][date][0][0] != 0 && !(shutters == 0 && date == front_ignore_dates) && timeToMins(hour(), minute()) > current_times[nr][0] && timeToMins(hour(), minute()) < current_times[nr][1]) {
+  if (date != -1 && date != (sizeof(dates) / sizeof(dates[0])) && (times[nr][date][0][0] != 254 || times[nr][date][0][0] != 255) && timeToMins(hour(localT()), minute(localT())) > current_times[nr][0] && timeToMins(hour(localT()), minute(localT())) < current_times[nr][1]) {
     result = false;
   }
-  if (shutters == 0 && (front_lock_dates[0][1] < month() || (front_lock_dates[0][1] == month() && front_lock_dates[0][0] <= day())) && (front_lock_dates[1][1] > month() || (front_lock_dates[1][1] == month() && front_lock_dates[1][0] >= day()))) {
-    result = false;
+  if (times[nr][date][0][0] == 254) {
+    result = true;
   }
+	else if(times[nr][date][0][0] == 255){
+		result = false;
+	}
   return result;
 }
 
@@ -458,7 +449,7 @@ int getDarksky(int index){
 void updateDate(){
    date = -1;
    for (int i = 0; i < 9; i++) {
-    if (dates[i][1] < month() || (dates[i][1] == month() && dates[i][0] <= day())) {
+    if (dates[i][1] < month(localT()) || (dates[i][1] == month(localT()) && dates[i][0] <= day(localT()))) {
       date = i;
     }
    }
@@ -470,15 +461,18 @@ String showCurrentTimes(int nr){
    if (nr != 0) {
      table_nr = nr - 1;
    }
-   if (times[table_nr][date][0][0] == 0 || date == -1 || date == 8){
+   if (times[table_nr][date][0][0] == 254 || date == -1 || date == 9){
       sentence = "Diese Rollos werden im aktuellen Zeitraum nicht heruntergefahren.";
-   else if (nr == 0 && (front_lock_dates[0][1] < month() || (front_lock_dates[0][1] == month() && front_lock_dates[0][0] <= day())) && (front_lock_dates[1][1] > month() || (front_lock_dates[1][1] == month() && front_lock_dates[1][0] >= day()))){
+	 }
+   else if (times[table_nr][date][0][0] == 255){
       sentence = "Diese Rollos werden im aktuellen Zeitraum nicht hochgefahren.";
+	 }
    else if (nr == 1){
       sentence = "Diese Rollos sind heute planmäßig von " + minsToTime(current_times[table_nr][0]) + " bis " + minsToTime(current_times[table_nr][1]) + " unten.";
+	 }
    else{
       sentence = "Diese Rollos sind heute von " + minsToTime(current_times[table_nr][0]) + " bis " + minsToTime(current_times[table_nr][1]) + " unten.";
-   }
+	 }
 }
       
 String minsToTime(int _time){
@@ -494,18 +488,26 @@ int timeToMins(byte _hour, byte _minute){
    return minutes_since_0;
 }
 
+time_t localT(){
+	return now() + 3600;
+}
+							 
 int dailyTime(byte nr, bool direction){		//calculates the times the given group has to move in the specified direction on the current day for a smooth transition
    int time_diff;
    int date_diff;
    int og_date_diff;
    int new_time;
-   
-   og_date_diff = (dates[date + 1][0] - dates[date][0]) + (dates[date + 1][1] - dates[date][1])*30; //20
-   date_diff = dates[date + 1][0] - day();
-   date_diff += (dates[date + 1][1] - month()) * 30; //15  80
-   time_diff = timeToMins(times[nr][date + 1][direction][0], times[nr][date + 1][direction][1]) - timeToMins(times[nr][date][direction][0], times[nr][date][direction][1]);
-   time_diff -= (date_diff) * (time_diff / og_date_diff);
-   new_time = timeToMins(times[nr][date][direction][0], times[nr][date][direction][1]) + time_diff;
+	 if(times[nr][date][direction][0] != 254 || times[nr][date][direction][0] != 255){
+		 og_date_diff = (dates[date + 1][0] - dates[date][0]) + (dates[date + 1][1] - dates[date][1])*30;
+		 date_diff = dates[date + 1][0] - day(localT());
+		 date_diff += (dates[date + 1][1] - month(localT())) * 30;
+		 time_diff = timeToMins(times[nr][date + 1][direction][0], times[nr][date + 1][direction][1]) - timeToMins(times[nr][date][direction][0], times[nr][date][direction][1]);
+		 time_diff -= (date_diff) * (time_diff / og_date_diff);
+		 new_time = timeToMins(times[nr][date][direction][0], times[nr][date][direction][1]) + time_diff;
+	 }
+	 else{
+		 new_time = 0;
+	 }
    return new_time;
 }
 
@@ -605,32 +607,33 @@ void sendNTPpacket(IPAddress &address)
 		 
 //********************************Main loop***************************************
 void loop() {
-	if(month() != check_month){	//check if its a new month
+	if(month(localT()) != check_month){	//check if its a new month
+		digitalWrite(RED_PIN, HIGH);
+		digitalWrite(GREEN_PIN, HIGH);
+		delay(5000)
+		digitalWrite(RED_PIN, LOW);
+		digitalWrite(GREEN_PIN, LOW);
 		ESP.restart();	//restart every month to prevent problems from building up
 	}
-	if(day() != check_day){	//check if its a new day
+	if(day(localT()) != check_day && hour(localT()) >= 9){	//dawn of the first day   ..or any day. Damnit now I have the clock town theme stuck in my head.
     updateDate();
     current_times[0][0] = dailyTime(0, false);
     current_times[0][1] = dailyTime(0, true);
     current_times[1][0] = dailyTime(1, false);
     current_times[1][1] = dailyTime(1, true);
-		check_day = day();
+		controllShutter(true);
+		check_day = day(localT());
+	}
+	else{
+		controllShutter(false);
 	}
 	for(int i = 0; i < 600; i++){	//total time of 300000ms = 5 minutes
-		last = millis();
+		last = millis(); //never have to worry about millis() overflow because that happens after ~50 days but the ESP resets every month
   	while (millis() - last < 500){	//timing of the error blinking without needing a second millis comparison
 			ArduinoOTA.handle();
     	server.handleClient();
     	delay(1);		//give the ESP some rest. Because the two handle functions also take some time each loop actually takes more than 1ms so the total wait time is also above 5 mins but who cares
    	}
 		handleError();
-		if(digitalRead(BUTTON_PIN) == LOW){		//if the button is pressed, wait 3 seconds and then send the current states again
-			delay(3000);
-			for (int i = 0; i < 3; i++) {
-      	moveShutter(i, r_state[i]);
-      	delay(20);
-			}
-		}
 	}
-  controllShutter();
 }
